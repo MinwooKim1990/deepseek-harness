@@ -44,23 +44,23 @@ describe('loadOptionalPatches', () => {
     expect(loadOptionalPatches(NAME, join(tmp(), PROFILE_PATCH_FILENAME))).toBeUndefined()
   })
 
-  it('parses a patch list and preserves !!js expressions as loader expression nodes', () => {
+  it('parses a data-only patch list', () => {
     const dir = tmp()
     writeFileSync(join(dir, PROFILE_PATCH_FILENAME), [
       '- id: agent-loop',
       "  name: '@deepseek-ai/dsh-agent-loop'",
       '  config:',
-      '    model: !!js process.env.DSH_SPEC_MODEL',
+      '    model: deepseek-chat',
       '- insert:',
       '    - id: llm',
-      "      name: '@deepseek-ai/dsh-llm-pi-ai'",
+      "      name: '@deepseek-ai/dsh-llm-deepseek'",
       '',
     ].join('\n'))
     const patches = loadOptionalPatches(NAME, join(dir, PROFILE_PATCH_FILENAME))
     expect(patches).toHaveLength(2)
     expect(patches?.[0]).toMatchObject({
       id: 'agent-loop',
-      config: { model: { __jsExpr: 'process.env.DSH_SPEC_MODEL' } },
+      config: { model: 'deepseek-chat' },
     })
     expect(patches?.[1]?.insert).toHaveLength(1)
   })
@@ -72,14 +72,33 @@ describe('loadOptionalPatches', () => {
       .toThrow(new RegExp(`^${NAME}: failed to read patches `))
   })
 
-  it('fails loud on unparsable YAML and on a !!js tag with no expression body', () => {
+  it('fails loud on unparsable YAML and rejects executable YAML tags explicitly', () => {
     const dir = tmp()
     writeFileSync(join(dir, PROFILE_PATCH_FILENAME), 'invalid: [unclosed\n')
     expect(() => loadOptionalPatches(NAME, join(dir, PROFILE_PATCH_FILENAME)))
       .toThrow(new RegExp(`^${NAME}: failed to parse patches `))
-    writeFileSync(join(dir, PROFILE_PATCH_FILENAME), '- id: x\n  config:\n    a: !!js\n')
-    expect(() => loadOptionalPatches(NAME, join(dir, PROFILE_PATCH_FILENAME)))
-      .toThrow(new RegExp(`^${NAME}: failed to parse patches `))
+    for (const tag of [
+      '!!js process.env.VALUE',
+      '!js process.env.VALUE',
+      '!<tag:yaml.org,2002:js> process.env.VALUE',
+    ]) {
+      writeFileSync(join(dir, PROFILE_PATCH_FILENAME), `- id: x\n  config:\n    a: ${tag}\n`)
+      expect(() => loadOptionalPatches(NAME, join(dir, PROFILE_PATCH_FILENAME)))
+        .toThrow('executable YAML tags are disabled')
+    }
+  })
+
+  it('rejects writable patches that try to reactivate removed runtime packages', () => {
+    const dir = tmp()
+    const file = join(dir, PROFILE_PATCH_FILENAME)
+    for (const plugin of [
+      '@deepseek-ai/dsh-session-telemetry',
+      '@deepseek-ai/dsh-mcp-client',
+    ]) {
+      writeFileSync(file, `- insert:\n    - id: blocked\n      name: '${plugin}'\n`)
+      expect(() => loadOptionalPatches(NAME, file))
+        .toThrow(`blocked high-risk plugin "${plugin}"`)
+    }
   })
 
   it('fails loud when the file is not a top-level array or an entry is not an object', () => {
@@ -268,20 +287,19 @@ describe('Loader entry disabled interpolation', () => {
 })
 
 describe('boot with user patches', () => {
-  it('applies id-targeted overrides, inserts, and interpolates !!js from the environment', async () => {
+  it('applies data-only id-targeted overrides and inserts', async () => {
     const dir = tmp()
     const userDir = tmp()
     writeFileSync(join(userDir, PROFILE_PATCH_FILENAME), [
       '- id: noop',
       '  name: ./noop.mjs',
       '  config:',
-      '    value: !!js process.env.DSH_APP_BOOT_USER_SPEC',
+      '    value: user-value',
       '- insert:',
       '    - id: user-extra',
       '      name: ./noop.mjs',
       '',
     ].join('\n'))
-    process.env['DSH_APP_BOOT_USER_SPEC'] = 'user-value'
     const ctx = await boot(NAME, writeTree(dir), loadOptionalPatches(NAME, join(userDir, PROFILE_PATCH_FILENAME)))
     try {
       const noop = [...ctx.loader.entries()].find(entry => entry.options.id === 'noop')
@@ -290,7 +308,6 @@ describe('boot with user patches', () => {
       expect([...ctx.loader.entries()].some(entry => entry.options.id === 'user-extra')).toBe(true)
     } finally {
       await ctx.fiber.dispose()
-      delete process.env['DSH_APP_BOOT_USER_SPEC']
     }
   })
 

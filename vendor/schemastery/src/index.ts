@@ -256,10 +256,7 @@ const Schema = function (options: Schema) {
 
   Object.assign(schema, options)
   if (typeof schema.callback === 'string') {
-    try {
-      // eslint-disable-next-line no-new-func
-      schema.callback = new Function('return ' + schema.callback)()
-    } catch {}
+    schema.callback = undefined
   }
   Object.defineProperty(schema, 'uid', { value: globalThis.__schemastery_index__++ })
   Object.setPrototypeOf(schema, Schema.prototype)

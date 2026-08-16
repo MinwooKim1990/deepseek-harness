@@ -39,11 +39,5 @@
           # the compression choice or the default zstd frames hide the logs.
           compression: none
       - insert:
-          - id: code-runtime
-            name: '@deepseek-ai/dsh-code-runtime-worker-thread'
-          - id: cordis-host-runner
-            name: '@deepseek-ai/dsh-cordis-host-runner'
-          - id: tool-cordis
-            name: '@deepseek-ai/dsh-tool-cordis'
           - id: llm-replay
             name: '@deepseek-ai/dsh-llm-replay'

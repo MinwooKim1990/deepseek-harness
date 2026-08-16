@@ -91,7 +91,8 @@ describe('request-level dynamic configuration', () => {
     await ctx.credentials.set(KEY_REF, 'sk-arrived')
     await prompt(ctx)
     expect(server.headers[0]?.authorization).toBe('Bearer sk-arrived')
-    await expect(access(join(dir, '.anonymous-user-id'))).resolves.toBeUndefined()
+    expect(server.headers[0]).not.toHaveProperty('x-deepseek-harness-user-id')
+    await expect(access(join(dir, '.anonymous-user-id'))).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
   it('rejects a stored credential no header can carry, never echoing it in the failure', async () => {

@@ -11,7 +11,7 @@
  * @module @deepseek-ai/dsh-cordis-host-runner/sandbox
  */
 
-import { createContext, runInContext, Script } from 'node:vm'
+import { createContext } from 'node:vm'
 import { sandboxDefineTool, sandboxRegisterTool } from './guard.ts'
 
 /** Exact Host closure symbols exposed by the sandbox and guarded Context. */
@@ -55,31 +55,8 @@ function taggedConsole(id: string): Record<'log' | 'info' | 'warn' | 'error' | '
   return { log, info: log, warn: log, debug: log, error }
 }
 
-/**
- * Patch only VM constructors so `instanceof` accepts both VM values and host values passed as
- * arguments, events, or service results; host intrinsics remain untouched.
- */
-const DUAL_REALM_INSTANCEOF_PRELUDE = `
-(hostIntrinsics) => {
-  'use strict'
-  const ordinary = Function.prototype[Symbol.hasInstance]
-  for (const name of Object.keys(hostIntrinsics)) {
-    const VmCtor = globalThis[name]
-    const HostCtor = hostIntrinsics[name]
-    if (typeof VmCtor !== 'function' || typeof HostCtor !== 'function') continue
-    Object.defineProperty(VmCtor, Symbol.hasInstance, {
-      value: (instance) => ordinary.call(VmCtor, instance) || ordinary.call(HostCtor, instance),
-      configurable: true,
-    })
-  }
-}
-`
-
-/** Run {@link DUAL_REALM_INSTANCEOF_PRELUDE} in a freshly created sandbox, handing it the host intrinsics to pair up. */
-function patchDualRealmInstanceof(sandbox: object): void {
-  const patch = runInContext(DUAL_REALM_INSTANCEOF_PRELUDE, sandbox) as (intrinsics: Record<string, unknown>) => void
-  patch({ Object, Array, Function, Error, TypeError, RangeError, SyntaxError, Promise, RegExp, Date, Map, Set })
-}
+/** Hardened no-op: dynamic host code execution is disabled. */
+function patchDualRealmInstanceof(sandbox: object): void { void sandbox }
 
 const TIMER_REDIRECT
   = 'Node timers are unavailable. Use the cordis timer service instead: declare inject: [\'timer\'] on your plugin '
@@ -145,15 +122,6 @@ export function createSandbox(id: string, harnessExtras: Record<string, unknown>
 }
 
 /**
- * Cross-realm SyntaxError detection: a compile failure inside `runInContext`
- * constructs its error in the SANDBOX realm, so a host `instanceof
- * SyntaxError` is silently false — the `name` property is the realm-safe tag.
- */
-function isSyntaxError(error: unknown): error is Error {
-  return typeof error === 'object' && error !== null && (error as { name?: unknown }).name === 'SyntaxError'
-}
-
-/**
  * The parse-failure context a vm `SyntaxError` carries: the vm prints the
  * offending source line and a caret before the message, which is exactly what
  * a model needs to self-correct — surface it instead of the bare message.
@@ -204,13 +172,9 @@ export function parseErrorMessage(half: 'code.host' | 'code.client', context: st
  * @throws when the body does not parse, with the offending line and a teaching hint.
  */
 export function precheckCode(code: string, half: 'code.host' | 'code.client'): void {
-  try {
-    // Compile-only: constructing the Script parses the source and runs nothing.
-    new Script(`(async () => {\n${code}\n})()`, { filename: `cordis-dyn-${half}.js` })
-  } catch (error) {
-    if (!isSyntaxError(error)) throw error
-    throw new Error(parseErrorMessage(half, syntaxErrorContext(error)))
-  }
+  void code
+  void half
+  throw new Error('dynamic Cordis packages are disabled in this hardened build')
 }
 
 /**
@@ -225,14 +189,9 @@ export function precheckCode(code: string, half: 'code.host' | 'code.client'): v
  * @returns whatever the code returned, still un-narrowed (the run lifecycle checks plugin shape).
  */
 export async function evaluateHostCode(sandbox: object, code: string, id: string, vmTimeoutMs: number): Promise<unknown> {
-  try {
-    return await runInContext(
-      `(async () => {\n${code}\n})()`,
-      sandbox,
-      { filename: `cordis-dyn-${id}.js`, timeout: vmTimeoutMs },
-    )
-  } catch (error) {
-    if (!isSyntaxError(error)) throw error
-    throw new Error(parseErrorMessage('code.host', syntaxErrorContext(error)))
-  }
+  void sandbox
+  void code
+  void id
+  void vmTimeoutMs
+  throw new Error('dynamic Cordis packages are disabled in this hardened build')
 }

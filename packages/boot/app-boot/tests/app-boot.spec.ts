@@ -94,7 +94,7 @@ describe('loadLayeredEnv', () => {
     for (const name of NAMES) Reflect.deleteProperty(process.env, name)
   }
 
-  it('layers user under project under the inherited environment', () => {
+  it('layers the user environment under inherited values and ignores the project environment', () => {
     const home = tmp()
     const project = tmp()
     writeFileSync(join(home, '.env'), [
@@ -115,9 +115,9 @@ describe('loadLayeredEnv', () => {
     const warn = vi.fn()
     try {
       loadLayeredEnv(NAME, project, warn)
-      expect(process.env[NAMES[0]]).toBe('project')
+      expect(process.env[NAMES[0]]).toBe('user')
       expect(process.env[NAMES[1]]).toBe('user-only')
-      expect(process.env[NAMES[2]]).toBe('project-only')
+      expect(process.env[NAMES[2]]).toBeUndefined()
       expect(process.env['APP_BOOT_LAYERED_INHERITED']).toBe('inherited')
       expect(warn).not.toHaveBeenCalled()
     } finally {
@@ -133,22 +133,24 @@ describe('loadLayeredEnv', () => {
     ['a skill root', 'DSH_AGENTS_HOME=/tmp/injected\n'],
     ['a network proxy', 'HTTPS_PROXY=http://attacker.example\n'],
     ['a lowercase network proxy', 'https_proxy=http://attacker.example\n'],
-  ])('refuses to launch when a .env sets %s, before applying anything', (_case, content) => {
+  ])('ignores a project-only %s without applying or reporting it', (_case, content) => {
     const home = tmp()
     const project = tmp()
     writeFileSync(join(project, '.env'), `${NAMES[1]}=applied-anyway\n${content}`)
     clear()
     vi.stubEnv('DSH_HOME', home)
+    const warn = vi.fn()
     try {
-      expect(() => loadLayeredEnv(NAME, project, vi.fn())).toThrow(/only the launching environment may set/)
+      expect(() => loadLayeredEnv(NAME, project, warn)).not.toThrow()
       expect(process.env[NAMES[1]]).toBeUndefined()
+      expect(warn).not.toHaveBeenCalled()
     } finally {
       clear()
       vi.unstubAllEnvs()
     }
   })
 
-  it('reports each file value with its absolute path', () => {
+  it('reports loaded user-file values with their absolute path and omits project-file values', () => {
     const home = tmp()
     const project = tmp()
     writeFileSync(join(home, '.env'), `${NAMES[1]}=u\n`)
@@ -158,7 +160,7 @@ describe('loadLayeredEnv', () => {
     try {
       const snapshot = loadLayeredEnv(NAME, project, vi.fn())
       expect(snapshot.get(NAMES[1])).toEqual({ value: 'u', source: 'user-env', path: join(home, '.env') })
-      expect(snapshot.get(NAMES[2])).toEqual({ value: 'p', source: 'project-env', path: join(project, '.env') })
+      expect(snapshot.get(NAMES[2])).toBeUndefined()
       expect(snapshot.getFrom(NAMES[2], ['process', 'user-env'])).toBeUndefined()
     } finally {
       clear()
@@ -176,7 +178,7 @@ describe('loadLayeredEnv', () => {
     try {
       loadLayeredEnv(NAME, project, vi.fn())
       expect(process.env[NAMES[1]]).toBe('real-home')
-      expect(process.env[NAMES[2]]).toBe('set-by-project')
+      expect(process.env[NAMES[2]]).toBeUndefined()
     } finally {
       clear()
       vi.unstubAllEnvs()
@@ -196,8 +198,8 @@ describe('loadLayeredEnv', () => {
       const snapshot = loadLayeredEnv(NAME, project, warn)
       expect(warn).toHaveBeenCalledWith(expect.stringContaining(`${NAME}: failed to load .env`))
       expect(snapshot.get(NAMES[1])).toBeUndefined()
-      expect(snapshot.get(NAMES[2])).toEqual({ value: 'project-only', source: 'project-env', path: join(project, '.env') })
-      expect(process.env[NAMES[2]]).toBe('project-only')
+      expect(snapshot.get(NAMES[2])).toBeUndefined()
+      expect(process.env[NAMES[2]]).toBeUndefined()
     } finally {
       clear()
       vi.unstubAllEnvs()
@@ -215,8 +217,8 @@ describe('loadLayeredEnv', () => {
     try {
       const snapshot = loadLayeredEnv(NAME, project)
       expect(write).toHaveBeenCalledWith(expect.stringContaining(`${NAME}: failed to load .env`))
-      expect(snapshot.get(NAMES[2])).toEqual({ value: 'project-only', source: 'project-env', path: join(project, '.env') })
-      expect(process.env[NAMES[2]]).toBe('project-only')
+      expect(snapshot.get(NAMES[2])).toBeUndefined()
+      expect(process.env[NAMES[2]]).toBeUndefined()
     } finally {
       write.mockRestore()
       clear()
@@ -224,7 +226,7 @@ describe('loadLayeredEnv', () => {
     }
   })
 
-  it('passes over an absent layer without reporting it', () => {
+  it('passes over an absent user layer and an ignored project layer without reporting either', () => {
     const home = tmp()
     const project = tmp()
     writeFileSync(join(project, '.env'), `${NAMES[2]}=project-only\n`)
@@ -234,7 +236,7 @@ describe('loadLayeredEnv', () => {
     try {
       const snapshot = loadLayeredEnv(NAME, project, warn)
       expect(warn).not.toHaveBeenCalled()
-      expect(snapshot.get(NAMES[2])).toEqual({ value: 'project-only', source: 'project-env', path: join(project, '.env') })
+      expect(snapshot.get(NAMES[2])).toBeUndefined()
     } finally {
       clear()
       vi.unstubAllEnvs()
@@ -256,14 +258,16 @@ describe('loadLayeredEnv', () => {
     }
   })
 
-  it('reads a harness home that is also the invocation directory exactly once', () => {
+  it('does not reinterpret the invocation directory as a user layer when it is also the harness home', () => {
     const both = tmp()
     writeFileSync(join(both, '.env'), `${NAMES[2]}=one-file\n`)
     clear()
     vi.stubEnv('DSH_HOME', both)
+    const warn = vi.fn()
     try {
-      const snapshot = loadLayeredEnv(NAME, both, vi.fn())
-      expect(snapshot.get(NAMES[2])).toEqual({ value: 'one-file', source: 'project-env', path: join(both, '.env') })
+      const snapshot = loadLayeredEnv(NAME, both, warn)
+      expect(snapshot.get(NAMES[2])).toBeUndefined()
+      expect(warn).not.toHaveBeenCalled()
     } finally {
       clear()
       vi.unstubAllEnvs()
@@ -526,11 +530,16 @@ describe('assertEntriesActivated', () => {
 })
 
 describe('loadOverlayPatches', () => {
-  it('loads expressions and rejects missing, malformed, non-array, and non-mapping overlays', () => {
+  it('loads data-only patches and rejects executable tags, missing, malformed, non-array, and non-mapping overlays', () => {
     const dir = tmp()
     const valid = join(dir, 'valid.yml')
-    writeFileSync(valid, '- id: target\n  config:\n    value: !!js process.env.VALUE\n')
-    expect(loadOverlayPatches(NAME, valid)).toEqual([{ id: 'target', config: { value: { __jsExpr: 'process.env.VALUE' } } }])
+    writeFileSync(valid, '- id: target\n  config:\n    value: literal\n')
+    expect(loadOverlayPatches(NAME, valid)).toEqual([{ id: 'target', config: { value: 'literal' } }])
+    for (const [index, tag] of ['!!js process.env.VALUE', '!js process.env.VALUE'].entries()) {
+      const executable = join(dir, `executable-${index}.yml`)
+      writeFileSync(executable, `- id: target\n  config:\n    value: ${tag}\n`)
+      expect(() => loadOverlayPatches(NAME, executable)).toThrow('executable YAML tags are disabled')
+    }
     expect(() => loadOverlayPatches(NAME, join(dir, 'missing.yml'))).toThrow(`${NAME}: failed to read overlay`)
     const malformed = join(dir, 'malformed.yml')
     writeFileSync(malformed, ': bad')

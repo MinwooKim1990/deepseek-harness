@@ -92,9 +92,6 @@
     # Supplying those profiles is exactly what the web Models page does. Which
     # adapters exist is composition; which providers run is the user's settings
     # document.
-    - id: llm-pi-ai
-      name: '@deepseek-ai/dsh-llm-pi-ai'
-
     - id: session-persistence-jsonl
       name: '@deepseek-ai/dsh-session-persistence-jsonl'
       config:
@@ -145,21 +142,6 @@
     # shutdownTimeoutMillis is the load-bearing outer bound when a transport
     # promise never settles. Every CLI exit path drains it by disposing the root
     # on SIGINT/SIGTERM.
-    - id: session-telemetry-otel
-      name: '@deepseek-ai/dsh-session-telemetry-otel'
-      config:
-        mode: !!js process.env.DSH_TELEMETRY_MODE || 'DISABLED'
-        shutdownTimeoutMillis: 3000
-        exporter:
-          url: !!js process.env.DSH_TELEMETRY_OTLP_URL ?? 'https://harness-telemetry.deepseeksvc.com/v1/logs'
-          compression: gzip
-          timeoutMillis: 1000
-        processor:
-          scheduledDelayMillis: 10000
-          maxQueueSize: 2048
-          maxExportBatchSize: 2048
-          exportTimeoutMillis: 1500
-
     - id: subprocess
       name: '@deepseek-ai/dsh-subprocess-local'
 
@@ -250,9 +232,6 @@
     - id: commands
       name: '@deepseek-ai/dsh-commands'
 
-    - id: command-feedback
-      name: '@deepseek-ai/dsh-command-feedback'
-
     - id: goal
       name: '@deepseek-ai/dsh-goal'
 
@@ -332,14 +311,6 @@
     - id: tool-subagent-report
       name: '@deepseek-ai/dsh-tool-subagent-report'
 
-    - id: workflow-worker-thread
-      name: '@deepseek-ai/dsh-workflow-worker-thread'
-      config:
-        provider: spawn
-
-    - id: tool-workflow
-      name: '@deepseek-ai/dsh-tool-workflow'
-
     - id: timeout-policy
       name: '@deepseek-ai/dsh-tool-call-timeout-policy'
 
@@ -375,12 +346,6 @@
       name: '@deepseek-ai/dsh-tool-goal'
 
     # Fresh-agent Ralph iteration over a build-time-fixed script.
-    - id: tool-ralph
-      name: '@deepseek-ai/dsh-tool-ralph'
-      config:
-        subagentProvider: spawn
-        maxRounds: 64
-
     - id: tool-str-replace-editor
       name: '@deepseek-ai/dsh-tool-str-replace-editor'
       config:

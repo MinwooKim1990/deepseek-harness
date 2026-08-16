@@ -19,7 +19,6 @@ import type {
 } from '@deepseek-ai/dsh-llm'
 import type { CredentialRef } from '@deepseek-ai/dsh-credentials'
 import { idleWatchdog, timeoutOf } from '@deepseek-ai/dsh-timeout'
-import type { AnonymousUserId } from '@deepseek-ai/dsh-anonymous-user-id'
 import { serializeRequest } from './serialize.ts'
 import type { RequestDefaults } from './serialize.ts'
 import { parseSse } from './sse.ts'
@@ -81,8 +80,8 @@ export interface DeepSeekAdapterOptions {
    * `MISSING_CREDENTIAL` when no key is available anywhere.
    */
   resolveApiKey: (connection: DeepSeekConnectionOptions) => Promise<string>
-  /** Resolve the harness-home anonymous id shared with telemetry and feedback. */
-  resolveUserId: () => AnonymousUserId
+  /** Deprecated compatibility hook; ignored by the hardened adapter. */
+  resolveUserId?: () => unknown
 }
 
 /** Default maximum idle interval while an adapter stream read is outstanding. */
@@ -219,7 +218,6 @@ export class DeepSeekAdapter extends LlmAdapter {
     // sent to it can never come from different configuration generations.
     const connection = this.config.options()
     const apiKey = await this.config.resolveApiKey(connection)
-    const userId = this.config.resolveUserId()
     const consumer = new AbortController()
     const upstream = options.signal === undefined
       ? consumer.signal
@@ -230,7 +228,6 @@ export class DeepSeekAdapter extends LlmAdapter {
       watchdog.signal,
       connection,
       apiKey,
-      userId,
       () => { watchdog.pulse() },
     )[Symbol.asyncIterator]()
     let exhausted = false
@@ -273,7 +270,6 @@ export class DeepSeekAdapter extends LlmAdapter {
     signal: AbortSignal,
     connection: DeepSeekConnectionOptions,
     apiKey: string,
-    userId: AnonymousUserId,
     onComment: () => void,
   ): AsyncIterable<StreamChunk> {
     const body = serializeRequest(options, connection.defaults)
@@ -285,7 +281,6 @@ export class DeepSeekAdapter extends LlmAdapter {
       'content-type': 'application/json',
       'accept': 'text/event-stream',
       ...attributionHeaders(),
-      'x-deepseek-harness-user-id': String(userId),
       ...options.sessionId !== undefined
         ? { 'x-deepseek-harness-session-id': String(options.sessionId) }
         : {},

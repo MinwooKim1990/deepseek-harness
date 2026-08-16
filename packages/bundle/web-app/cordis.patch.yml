@@ -45,9 +45,6 @@
 # `dsh.client` rows are the browser roster the modules node half scans into
 # window.__DSH_BOOT__; the modules row is simultaneously a host row.
 - insert:
-    - id: code-runtime
-      name: '@deepseek-ai/dsh-code-runtime-worker-thread'
-
     - id: storage
       name: '@deepseek-ai/dsh-storage'
 
@@ -99,11 +96,6 @@
     - id: api-gateway
       name: '@deepseek-ai/dsh-host-apiproxy'
 
-    - id: cordis-host-runner
-      name: '@deepseek-ai/dsh-cordis-host-runner'
-
-    # Ordinary provider for the parsed Web flags. Its plugin-level injection
-    # waits for cmdlineArgs; no launcher metadata or special row kind is needed.
     - id: web-startup
       name: '@deepseek-ai/dsh-web-app/startup'
 
@@ -168,9 +160,6 @@
     - id: client-runtime
       name: '@deepseek-ai/dsh-client-runtime'
 
-    - id: cordis-client-runner
-      name: '@deepseek-ai/dsh-cordis-client-runner'
-
     - id: ui-theme
       name: '@deepseek-ai/dsh-client-ui-theme'
 
@@ -202,16 +191,6 @@
     - id: ui-tool
       name: '@deepseek-ai/dsh-client-ui-tool'
 
-    - id: ui-cordis
-      name: '@deepseek-ai/dsh-client-ui-cordis'
-
-    # Durable workflow lifecycle as an independent Chat node after the
-    # existing generic workflow tool row.
-    - id: ui-workflow-run
-      name: '@deepseek-ai/dsh-client-ui-workflow-run'
-
-    # Turn tail: the produced-files row under each closing assistant message.
-    # Remove this entry to turn the surface off; the tail hole renders empty.
     - id: ui-deliverables
       name: '@deepseek-ai/dsh-client-ui-deliverables'
 
@@ -388,15 +367,6 @@
 # singleton rather than a tool this agent calls, and the setup list is not
 # scope-aware — one copy per mounted preset means every child gets `report`
 # registered once per live session, which throws on the second.
-
-- id: workflow-worker-thread
-  disabled: true
-
-- id: tool-workflow
-  disabled: true
-
-- id: tool-ralph
-  disabled: true
 
 - id: agent-instructions
   disabled: true

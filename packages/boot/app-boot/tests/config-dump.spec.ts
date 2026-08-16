@@ -29,6 +29,8 @@ function writeBase(dir: string): string {
     '    key: !!js process.env.DSH_DUMP_SPEC',
     '- id: untouched',
     '  name: ./noop.mjs',
+    '  config:',
+    '    key: !!js process.env.DSH_DUMP_SPEC',
     '',
   ].join('\n'))
   return base
@@ -43,7 +45,6 @@ describe('renderConfigDump', () => {
       '- id: shared',
       '  config:',
       '    value: surface',
-      '    key: !!js process.env.DSH_DUMP_SPEC',
       '- insert:',
       '    - id: surface-extra',
       '      name: ./noop.mjs',
@@ -71,9 +72,9 @@ describe('renderConfigDump', () => {
       {
         id: 'shared',
         name: './noop.mjs',
-        config: { value: 'surface', key: { __jsExpr: 'process.env.DSH_DUMP_SPEC' } },
+        config: { value: 'surface' },
       },
-      { id: 'untouched', name: './noop.mjs' },
+      { id: 'untouched', name: './noop.mjs', config: { key: { __jsExpr: 'process.env.DSH_DUMP_SPEC' } } },
       { id: 'surface-extra', name: './noop.mjs', config: { value: 'user' } },
     ])
     // Unevaluated: the expression text round-trips as a !!js scalar.

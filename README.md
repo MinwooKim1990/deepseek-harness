@@ -1,5 +1,7 @@
 # DeepSeek Harness
 
+> **Security-hardened fork:** this `hardened` branch removes optional telemetry, identifiers, writable-config JavaScript, dynamic package installation, and other high-risk extension surfaces. See [HARDENING.md](HARDENING.md) for the exact threat model, verification, and upstream-sync procedure. This is defensive reduction, not an allegation of malicious upstream behavior.
+
 English | [中文](README.zh.md)
 
 DeepSeek Harness (`dsh`) is an open-source agent harness developed by [DeepSeek AI](https://deepseek.com).

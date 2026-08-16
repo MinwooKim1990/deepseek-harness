@@ -136,17 +136,6 @@
 
 # The worker-thread workflow engine fans a model-written JavaScript script's
 # `agent()` calls out through the spawn backend; the adjacent tool exposes it to the model.
-- id: workflow-worker-thread
-  name: '@deepseek-ai/dsh-workflow-worker-thread'
-  config:
-    provider: spawn
-
-- id: tool-workflow
-  name: '@deepseek-ai/dsh-tool-workflow'
-
-- id: tool-ralph
-  name: '@deepseek-ai/dsh-tool-ralph'
-# `todo_write` replaces the logged whole list for later model requests.
 - id: tool-todo
   name: '@deepseek-ai/dsh-tool-todo'
   config:

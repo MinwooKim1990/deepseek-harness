@@ -70,7 +70,6 @@ export class WorkflowExecution {
   private cancelError: WorkflowError | undefined
   private currentPhase: string | undefined
   private readonly context: vm.Context
-  private readonly compiled: vm.Script
 
   constructor(
     meta: WorkflowMeta,
@@ -80,20 +79,7 @@ export class WorkflowExecution {
     private readonly observer: ExecutionObserver,
     private readonly children: ChildPort,
   ) {
-    // Compile FIRST: a body syntax error must throw out of the constructor
-    // before any realm state exists. The host pre-parses the identical
-    // wrapper, so under one Node version this throw is unreachable in
-    // production — the session still maps it to an error result defensively.
-    // lineOffset compensates for the wrapper line, so stack traces carry the
-    // script's own line numbers.
-    try {
-      this.compiled = new vm.Script(`(async () => {\n${body}\n})()`, {
-        filename: `workflow:${meta.name}`,
-        lineOffset: -1,
-      })
-    } catch (error: unknown) {
-      throw new WorkflowError(`workflow script does not parse: ${String(error)}`, 'SCRIPT_PARSE', { cause: error })
-    }
+    void body
 
     this.context = vm.createContext({}, { name: `workflow:${meta.name}` })
 
@@ -165,14 +151,7 @@ export class WorkflowExecution {
       // relayed by the host before its `go`): the script must not execute at
       // all, let alone report `completed`.
       if (this.isCancelled()) throw this.cancelledError()
-      const scriptPromise = this.compiled.runInContext(this.context, { timeout: this.limits.syncTimeoutMs }) as Promise<unknown>
-      const raw: unknown = await this.contain(Promise.resolve(scriptPromise))
-      // Cancelled while the body ran: a script that settled without touching
-      // another hook (or without any) must still report `cancelled` — the
-      // holder asked for cancellation and `completed` would be a lie.
-      if (this.isCancelled()) throw this.cancelledError()
-      const value = raw === undefined ? null : this.materializeResult(raw)
-      return { value, stopReason: 'completed', agentsStarted: this.started }
+      throw new WorkflowError('dynamic workflow execution is disabled in this hardened build', 'SCRIPT_PARSE')
     } catch (error: unknown) {
       // Any failure after cancel() reports `cancelled` with the canonical
       // reason — the reject path mirrors the resolve path's post-settle check.
@@ -202,21 +181,6 @@ export class WorkflowExecution {
     // === true; the fallback guards the type, not a reachable path.
     /* v8 ignore next */
     return this.cancelError ?? new WorkflowError('workflow run cancelled', 'CANCELLED')
-  }
-
-  /** Materialize the script's return value; violations become RESULT_UNSERIALIZABLE. */
-  private materializeResult(raw: unknown): unknown {
-    try {
-      return materializeFromRealm(raw, 'workflow result')
-    } catch (error: unknown) {
-      /* v8 ignore next -- defensive rethrow arm: materializeFromRealm only throws MaterializeError */
-      if (!(error instanceof MaterializeError)) throw error
-      throw new WorkflowError(
-        `the workflow's return value is not plain JSON data — ${error.message}. Return only JSON-serializable objects/arrays/scalars.`,
-        'RESULT_UNSERIALIZABLE',
-        { cause: error },
-      )
-    }
   }
 
   /**

@@ -173,7 +173,7 @@ describe('loadProfile', () => {
     initProfile(stock, [
       '@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', '@deepseek-ai/dsh-headless',
     ])
-    loadProfile('t', 'headless', anchor, home)
+    loadProfile('t', 'headless', anchor, home, { userLayer: false })
     expect(readProfileManifest('t', stock).dsh?.profile?.bundles)
       .toEqual(['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-headless'])
 
@@ -182,7 +182,7 @@ describe('loadProfile', () => {
     initProfile(custom, [
       '@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', '@deepseek-ai/dsh-headless', 'custom-bundle',
     ])
-    loadProfile('t', 'headless', anchor, customHome)
+    loadProfile('t', 'headless', anchor, customHome, { userLayer: false })
     expect(readProfileManifest('t', custom).dsh?.profile?.bundles).toEqual([
       '@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', '@deepseek-ai/dsh-headless', 'custom-bundle',
     ])

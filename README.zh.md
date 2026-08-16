@@ -1,5 +1,7 @@
 # DeepSeek Harness
 
+> **安全强化分支：**此 `hardened` 分支移除了可选遥测、匿名标识、可写配置中的 JavaScript、动态软件包安装及其他高风险扩展面。完整威胁模型、验证方法和上游同步流程见 [HARDENING.md](HARDENING.md)。这是防御性缩减，并不指控上游存在恶意行为。
+
 [English](README.md) | 中文
 
 DeepSeek Harness（`dsh`）是由 [DeepSeek AI](https://deepseek.com) 开发的开源 agent harness（智能体框架）。

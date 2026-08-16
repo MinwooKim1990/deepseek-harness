@@ -1,0 +1,73 @@
+name: Hardened Guard
+
+on:
+  push:
+    branches: [hardened]
+  pull_request:
+    branches: [hardened]
+  workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hardened-guard-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DSH_TELEMETRY_DISABLED: '1'
+
+jobs:
+  verify:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+
+      - name: Install immutable dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify hardening invariants
+        run: |
+          python3 security/hardening/verify_hardened.py .
+          python3 security/hardening/check_runtime_closure.py .
+
+      - name: Test hardened boundaries
+        run: pnpm exec vitest run packages/boot/app-boot/tests packages/llm/llm-deepseek/tests
+
+      - name: Build all runtime artifacts
+        run: pnpm build
+
+      - name: Smoke-test CLI
+        run: node apps/cli/lib/bin.js --version
+
+  upstream-drift:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check upstream master
+        shell: bash
+        run: |
+          git fetch --no-tags https://github.com/deepseek-ai/deepseek-harness.git master
+          behind=$(git rev-list --count HEAD..FETCH_HEAD)
+          echo "Commits behind upstream: $behind"
+          if (( behind > 0 )); then
+            echo "::error::hardened is $behind commit(s) behind upstream master; review and merge upstream."
+            exit 1
+          fi

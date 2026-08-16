@@ -181,10 +181,9 @@ export function loadLayeredEnv(
   const home = resolveDshHome()
   const inherited = { ...process.env } as Record<string, string>
   // Parse both layers first: a rejection must not leave one file applied.
-  const project = readEnvLayer(binName, cwd, warn)
   const user = home === resolve(cwd) ? undefined : readEnvLayer(binName, home, warn)
   // Apply the checked values without replacing a higher-ranked name.
-  for (const layer of [project, user]) {
+  for (const layer of [user]) {
     if (layer === undefined) continue
     for (const [name, value] of Object.entries(layer.values)) {
       if (process.env[name] === undefined) process.env[name] = value
@@ -192,7 +191,6 @@ export function loadLayeredEnv(
   }
   return createLaunchEnvironmentSnapshot([
     { source: 'process', values: inherited },
-    ...project === undefined ? [] : [{ source: 'project-env' as const, path: project.path, values: project.values }],
     ...user === undefined ? [] : [{ source: 'user-env' as const, path: user.path, values: user.values }],
   ])
 }
@@ -201,10 +199,55 @@ const bootstrapIncludes = new WeakMap<Context, Entry>()
 
 // The include's YAML dialect (`!!js` scalars become expression nodes the
 // Loader interpolates against each entry's injection-ready context), imported
-// from the include itself so patch parsing and config dumping can never drift
-// from what the include mounts. User patch layers share it so they may
-// reference `process.env`.
+// from the include itself so trusted bundle parsing and config dumping cannot
+// drift from what the include mounts. Writable user layers are pre-screened and
+// never reach this schema when executable tags are present.
 const userPatchesSchema = entryListSchema
+
+/** Hardened boundary: writable profile and --patch layers are data, never JavaScript. */
+function assertNoUserJavaScript(file: string, content: string): void {
+  if (/!!?js\b|!<tag:yaml\.org,2002:js>/.test(content)) {
+    throw new Error(`dsh: executable YAML tags are disabled in user patch ${file}`)
+  }
+}
+
+const blockedUserPlugins = new Set([
+  '@deepseek-ai/dsh-session-telemetry',
+  '@deepseek-ai/dsh-session-telemetry-otel',
+  '@deepseek-ai/dsh-anonymous-user-id',
+  '@deepseek-ai/dsh-command-feedback',
+  '@deepseek-ai/dsh-cordis-host-runner',
+  '@deepseek-ai/dsh-cordis-client-runner',
+  '@deepseek-ai/dsh-client-ui-cordis',
+  '@deepseek-ai/dsh-tool-cordis',
+  '@deepseek-ai/dsh-workflow-worker-thread',
+  '@deepseek-ai/dsh-tool-workflow',
+  '@deepseek-ai/dsh-tool-ralph',
+  '@deepseek-ai/dsh-client-ui-workflow-run',
+  '@deepseek-ai/dsh-code-runtime-worker-thread',
+  '@deepseek-ai/dsh-mcp-client',
+  '@deepseek-ai/dsh-llm-pi-ai',
+])
+
+/** Hardened boundary: writable layers cannot reactivate removed runtime packages. */
+function assertNoBlockedUserPlugins(binName: string, file: string, patches: PatchOptions[]): void {
+  const seen = new WeakSet<object>()
+  const visit = (value: unknown): void => {
+    if (typeof value !== 'object' || value === null) return
+    if (seen.has(value)) return
+    seen.add(value)
+    if (Array.isArray(value)) {
+      value.forEach(visit)
+      return
+    }
+    const record = value as Record<string, unknown>
+    if (typeof record.name === 'string' && blockedUserPlugins.has(record.name)) {
+      throw new Error(`${binName}: blocked high-risk plugin ${JSON.stringify(record.name)} in user patch ${file}`)
+    }
+    Object.values(record).forEach(visit)
+  }
+  visit(patches)
+}
 
 /** Options for live user patch-layer reconciliation. */
 export interface UserPatchWatchOptions {
@@ -267,7 +310,8 @@ export async function watchUserPatches(
 /**
  * Load an optional patch-list file: a top-level YAML array of loader patch
  * entries (`@deepseek-ai/cordis-plugin-include`'s `PatchOptions`): id-targeted config
- * overrides and `insert` lists, with `!!js` expressions allowed. A missing
+ * overrides and `insert` lists. Executable YAML and blocked high-risk plugin
+ * names are rejected. A missing
  * file means "no layer"; an unreadable, unparsable, or non-array file throws —
  * a present patch file that cannot apply is a misconfiguration and must fail
  * loud at boot, never be silently skipped.
@@ -283,7 +327,10 @@ export function loadOptionalPatches(binName: string, file: string): PatchOptions
     if ((error as NodeJS.ErrnoException | null)?.code === 'ENOENT') return undefined
     throw new Error(`${binName}: failed to read patches ${file}: ${String(error)}`)
   }
-  return parsePatchList(binName, file, content, 'patches')
+  assertNoUserJavaScript(file, content)
+  const patches = parsePatchList(binName, file, content, 'patches', yaml.JSON_SCHEMA)
+  assertNoBlockedUserPlugins(binName, file, patches)
+  return patches
 }
 
 /**
@@ -302,7 +349,21 @@ export function loadOverlayPatches(binName: string, file: string): PatchOptions[
   } catch (error) {
     throw new Error(`${binName}: failed to read overlay ${file}: ${String(error)}`)
   }
-  return parsePatchList(binName, file, content, 'overlay')
+  assertNoUserJavaScript(file, content)
+  const patches = parsePatchList(binName, file, content, 'overlay', yaml.JSON_SCHEMA)
+  assertNoBlockedUserPlugins(binName, file, patches)
+  return patches
+}
+
+/** Load an immutable, package-owned bundle with the first-party !!js dialect. */
+export function loadTrustedOverlayPatches(binName: string, file: string): PatchOptions[] {
+  let content: string
+  try {
+    content = readFileSync(file, 'utf8')
+  } catch (error) {
+    throw new Error(`${binName}: failed to read trusted overlay ${file}: ${String(error)}`)
+  }
+  return parsePatchList(binName, file, content, 'trusted overlay')
 }
 /**
  * Parse one loader patch list: a top-level YAML array of
@@ -319,10 +380,11 @@ export function loadOverlayPatches(binName: string, file: string): PatchOptions[
  */
 function parsePatchList(
   binName: string, file: string, content: string, label: string,
+  schema: yaml.Schema = userPatchesSchema,
 ): PatchOptions[] {
   let parsed: unknown
   try {
-    parsed = yaml.load(content, { schema: userPatchesSchema })
+    parsed = yaml.load(content, { schema })
   } catch (error) {
     throw new Error(`${binName}: failed to parse ${label} ${file}: ${String(error)}`)
   }
