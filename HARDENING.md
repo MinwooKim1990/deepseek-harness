@@ -15,7 +15,7 @@ This public fork tracks [`deepseek-ai/deepseek-harness`](https://github.com/deep
 - Removes telemetry and command-feedback activation.
 - Removes the stable anonymous installation ID and `x-deepseek-harness-user-id` model-request header.
 - Blocks executable `!!js` tags in user profile and `--patch` YAML.
-- Blocks writable patches from reactivating removed telemetry, Cordis, workflow, code-runtime, MCP, feedback and Pi-AI packages—even when those packages exist as dev-only workspaces.
+- Restricts writable profile/home/`--patch` layers to data-only, id-targeted overrides; plugin insertion and module-name replacement fail closed.
 - Disables external profile package installation/update.
 - Disables Cordis host/client dynamic package evaluation.
 - Removes the Cordis dynamic Remote namespace and forwarded events from the web production closure.
@@ -32,6 +32,7 @@ The exact invariant list is checked by [`security/hardening/verify_hardened.py`]
 ```bash
 corepack pnpm install --frozen-lockfile
 python3 security/hardening/verify_hardened.py .
+corepack pnpm run verify-doc-graphs
 corepack pnpm build
 node apps/cli/lib/bin.js --version
 ```
@@ -54,6 +55,8 @@ corepack pnpm install --lockfile-only --ignore-scripts
 python3 security/hardening/verify_hardened.py .
 python3 security/hardening/check_runtime_closure.py .
 corepack pnpm install --frozen-lockfile
+corepack pnpm run gen-doc-graphs
+corepack pnpm run verify-doc-graphs
 corepack pnpm build
 git push origin hardened
 ```

@@ -43,6 +43,9 @@ jobs:
           python3 security/hardening/verify_hardened.py .
           python3 security/hardening/check_runtime_closure.py .
 
+      - name: Verify generated security documentation
+        run: pnpm run verify-doc-graphs
+
       - name: Test hardened boundaries
         run: pnpm exec vitest run packages/boot/app-boot/tests packages/llm/llm-deepseek/tests
 

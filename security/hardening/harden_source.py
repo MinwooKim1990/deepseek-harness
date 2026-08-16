@@ -7,6 +7,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from sync_hardened_docs import sync_hardened_docs
+
 PINNED = "47f943859bef60e4160492346772ded9b24f765a"
 ROOT = Path(sys.argv[1]).resolve()
 
@@ -182,59 +184,40 @@ function assertNoUserJavaScript(file: string, content: string): void {
   }
 }
 
-const blockedUserPlugins = new Set([
-  '@deepseek-ai/dsh-session-telemetry',
-  '@deepseek-ai/dsh-session-telemetry-otel',
-  '@deepseek-ai/dsh-anonymous-user-id',
-  '@deepseek-ai/dsh-command-feedback',
-  '@deepseek-ai/dsh-cordis-host-runner',
-  '@deepseek-ai/dsh-cordis-client-runner',
-  '@deepseek-ai/dsh-client-ui-cordis',
-  '@deepseek-ai/dsh-tool-cordis',
-  '@deepseek-ai/dsh-workflow-worker-thread',
-  '@deepseek-ai/dsh-tool-workflow',
-  '@deepseek-ai/dsh-tool-ralph',
-  '@deepseek-ai/dsh-client-ui-workflow-run',
-  '@deepseek-ai/dsh-code-runtime-worker-thread',
-  '@deepseek-ai/dsh-mcp-client',
-  '@deepseek-ai/dsh-llm-pi-ai',
-])
-
-/** Hardened boundary: writable layers cannot reactivate removed runtime packages. */
-function assertNoBlockedUserPlugins(binName: string, file: string, patches: PatchOptions[]): void {
-  const seen = new WeakSet<object>()
-  const visit = (value: unknown): void => {
-    if (typeof value !== 'object' || value === null) return
-    if (seen.has(value)) return
-    seen.add(value)
-    if (Array.isArray(value)) {
-      value.forEach(visit)
-      return
+/**
+ * Hardened boundary: writable layers may only override existing rows by id.
+ * Rejecting both insertion and module-name replacement closes package subpath,
+ * alias, URL, and local-path activation bypasses without inspecting specifier text.
+ */
+function assertUserPatchOverridesOnly(binName: string, file: string, patches: PatchOptions[]): void {
+  for (const [index, patch] of patches.entries()) {
+    const record = patch as unknown as Record<string, unknown>
+    if ('insert' in record) {
+      throw new Error(`${binName}: plugin insertion is disabled in user patches (${file}, entry ${index + 1})`)
     }
-    const record = value as Record<string, unknown>
-    if (typeof record.name === 'string' && blockedUserPlugins.has(record.name)) {
-      throw new Error(`${binName}: blocked high-risk plugin ${JSON.stringify(record.name)} in user patch ${file}`)
+    if ('name' in record) {
+      throw new Error(`${binName}: plugin module names are disabled in user patches (${file}, entry ${index + 1})`)
     }
-    Object.values(record).forEach(visit)
   }
-  visit(patches)
 }
 """,
 )
 exact(
     "packages/boot/app-boot/src/index.ts",
-    """ * overrides and `insert` lists, with `!!js` expressions allowed. A missing
+    """ * entries (`@deepseek-ai/cordis-plugin-include`'s `PatchOptions`): id-targeted config
+ * overrides and `insert` lists, with `!!js` expressions allowed. A missing
  * file means "no layer"; an unreadable, unparsable, or non-array file throws —
 """,
-    """ * overrides and `insert` lists. Executable YAML and blocked high-risk plugin
- * names are rejected. A missing
+    """ * entries (`@deepseek-ai/cordis-plugin-include`'s `PatchOptions`). Writable layers
+ * are restricted to id-targeted overrides: executable YAML, `insert`, and module
+ * `name` replacement are rejected. A missing
  * file means "no layer"; an unreadable, unparsable, or non-array file throws —
 """,
 )
 exact(
     "packages/boot/app-boot/src/index.ts",
     "  return parsePatchList(binName, file, content, 'patches')\n",
-    "  assertNoUserJavaScript(file, content)\n  const patches = parsePatchList(binName, file, content, 'patches', yaml.JSON_SCHEMA)\n  assertNoBlockedUserPlugins(binName, file, patches)\n  return patches\n",
+    "  assertNoUserJavaScript(file, content)\n  const patches = parsePatchList(binName, file, content, 'patches', yaml.JSON_SCHEMA)\n  assertUserPatchOverridesOnly(binName, file, patches)\n  return patches\n",
 )
 old_overlay = """export function loadOverlayPatches(binName: string, file: string): PatchOptions[] {
   let content: string
@@ -255,7 +238,7 @@ new_overlay = """export function loadOverlayPatches(binName: string, file: strin
   }
   assertNoUserJavaScript(file, content)
   const patches = parsePatchList(binName, file, content, 'overlay', yaml.JSON_SCHEMA)
-  assertNoBlockedUserPlugins(binName, file, patches)
+  assertUserPatchOverridesOnly(binName, file, patches)
   return patches
 }
 
@@ -594,6 +577,8 @@ exact(
 """,
 )
 
+sync_hardened_docs(ROOT)
+
 manifest = {
     "source_commit": PINNED,
     "removed_rows": removed_rows,
@@ -602,6 +587,8 @@ manifest = {
         "removed telemetry and feedback activation",
         "removed x-deepseek-harness-user-id and anonymous-id resolution from model requests",
         "blocked JavaScript tags in user/profile/--patch YAML",
+        "restricted writable patch layers to id-targeted overrides",
+        "synchronized public CLI documentation with hardened behavior",
         "disabled external profile plugin management",
         "disabled Cordis host/client dynamic evaluators",
         "removed the Cordis dynamic Remote namespace and forwarded events",

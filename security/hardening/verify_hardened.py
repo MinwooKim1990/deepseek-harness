@@ -50,12 +50,14 @@ present("packages/boot/app-boot/src/index.ts", [
     "executable YAML tags are disabled in user patch",
     "for (const layer of [user])",
     "loadTrustedOverlayPatches",
-    "blockedUserPlugins",
-    "assertNoBlockedUserPlugins(binName, file, patches)",
-    "@deepseek-ai/dsh-mcp-client",
-    "@deepseek-ai/dsh-session-telemetry",
+    "assertUserPatchOverridesOnly(binName, file, patches)",
+    "plugin insertion is disabled in user patches",
+    "plugin module names are disabled in user patches",
     "yaml.JSON_SCHEMA",
     "tag:yaml\\.org,2002:js",
+])
+absent("packages/boot/app-boot/src/index.ts", [
+    "blockedUserPlugins", "assertNoBlockedUserPlugins",
 ])
 absent("packages/api/remotes/src/client/index.ts", [
     "import dynamicRemote", "goalsRemote, dynamicRemote",
@@ -73,6 +75,19 @@ absent("packages/extensions/ui-cordis/src/client/index.ts", [
 ])
 present("apps/cli/src/plugin.ts", ["external profile plugin management is disabled"])
 
+present("apps/cli/README.md", [
+    "Disabled in this hardened fork", "data-only, id-targeted overrides",
+])
+present("apps/cli/README.zh.md", [
+    "hardened fork 已禁用", "data-only、按 id 定位",
+])
+present("apps/cli/reference/README.md", [
+    "exits 126 without invoking pnpm", "invoking directory's `.env` is deliberately ignored",
+    "production closure excludes dynamic Cordis",
+])
+present("apps/cli/reference/README.zh.md", [
+    "不会调用 pnpm", "调用目录的 `.env` 会被明确忽略", "生产依赖闭包排除了动态 Cordis",
+])
 for rel in [
     "package.json",
     "apps/cli/package.json",

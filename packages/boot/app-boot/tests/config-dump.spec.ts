@@ -31,6 +31,10 @@ function writeBase(dir: string): string {
     '  name: ./noop.mjs',
     '  config:',
     '    key: !!js process.env.DSH_DUMP_SPEC',
+    '- id: surface-extra',
+    '  name: ./noop.mjs',
+    '  config:',
+    '    value: base',
     '',
   ].join('\n'))
   return base
@@ -45,9 +49,9 @@ describe('renderConfigDump', () => {
       '- id: shared',
       '  config:',
       '    value: surface',
-      '- insert:',
-      '    - id: surface-extra',
-      '      name: ./noop.mjs',
+      '- id: surface-extra',
+      '  config:',
+      '    value: surface',
       '',
     ].join('\n'))
     const user = join(dir, 'user.yml')
@@ -80,10 +84,10 @@ describe('renderConfigDump', () => {
     // Unevaluated: the expression text round-trips as a !!js scalar.
     expect(dump).toContain('!!js process.env.DSH_DUMP_SPEC')
     // Source separators: origin file, plus every layer that changed the
-    // row; an inserted row carries the inserting layer as its origin.
+    // row; writable layers retain the immutable base row as their origin.
     expect(dump).toContain('# == base.yml, patched by surface.yml')
     expect(dump).toContain('# == base.yml\n- id: untouched')
-    expect(dump).toContain('# == surface.yml, patched by user.yml\n- id: surface-extra')
+    expect(dump).toContain('# == base.yml, patched by surface.yml, user.yml\n- id: surface-extra')
     expect(dump.indexOf('# == base.yml, patched by surface.yml')).toBeLessThan(dump.indexOf('# == base.yml\n- id: untouched'))
   })
 

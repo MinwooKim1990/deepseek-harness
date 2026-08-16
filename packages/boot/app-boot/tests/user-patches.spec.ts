@@ -17,6 +17,7 @@ import Timer from '@deepseek-ai/cordis-plugin-timer'
 import {
   boot,
   loadOptionalPatches,
+  loadOverlayPatches,
   PROFILE_PATCH_FILENAME,
   watchUserPatches,
 } from '../src/index.ts'
@@ -48,21 +49,16 @@ describe('loadOptionalPatches', () => {
     const dir = tmp()
     writeFileSync(join(dir, PROFILE_PATCH_FILENAME), [
       '- id: agent-loop',
-      "  name: '@deepseek-ai/dsh-agent-loop'",
       '  config:',
       '    model: deepseek-chat',
-      '- insert:',
-      '    - id: llm',
-      "      name: '@deepseek-ai/dsh-llm-deepseek'",
       '',
     ].join('\n'))
     const patches = loadOptionalPatches(NAME, join(dir, PROFILE_PATCH_FILENAME))
-    expect(patches).toHaveLength(2)
+    expect(patches).toHaveLength(1)
     expect(patches?.[0]).toMatchObject({
       id: 'agent-loop',
       config: { model: 'deepseek-chat' },
     })
-    expect(patches?.[1]?.insert).toHaveLength(1)
   })
 
   it('fails loud on an unreadable file (a present user patch layer is never skipped)', () => {
@@ -88,16 +84,23 @@ describe('loadOptionalPatches', () => {
     }
   })
 
-  it('rejects writable patches that try to reactivate removed runtime packages', () => {
+  it('rejects writable patches that insert or replace plugin modules', () => {
     const dir = tmp()
     const file = join(dir, PROFILE_PATCH_FILENAME)
-    for (const plugin of [
-      '@deepseek-ai/dsh-session-telemetry',
-      '@deepseek-ai/dsh-mcp-client',
-    ]) {
-      writeFileSync(file, `- insert:\n    - id: blocked\n      name: '${plugin}'\n`)
-      expect(() => loadOptionalPatches(NAME, file))
-        .toThrow(`blocked high-risk plugin "${plugin}"`)
+    for (const load of [loadOptionalPatches, loadOverlayPatches]) {
+      for (const plugin of [
+        '@deepseek-ai/dsh-session-telemetry',
+        '@deepseek-ai/dsh-mcp-client',
+        '@deepseek-ai/dsh-mcp-client/src/index.ts',
+        './local-plugin.mjs',
+      ]) {
+        writeFileSync(file, `- id: blocked\n  name: '${plugin}'\n`)
+        expect(() => load(NAME, file))
+          .toThrow('plugin module names are disabled in user patches')
+      }
+      writeFileSync(file, "- insert:\n    - id: safe-looking\n      name: '@deepseek-ai/dsh-llm-deepseek'\n")
+      expect(() => load(NAME, file))
+        .toThrow('plugin insertion is disabled in user patches')
     }
   })
 
@@ -287,17 +290,13 @@ describe('Loader entry disabled interpolation', () => {
 })
 
 describe('boot with user patches', () => {
-  it('applies data-only id-targeted overrides and inserts', async () => {
+  it('applies data-only id-targeted overrides', async () => {
     const dir = tmp()
     const userDir = tmp()
     writeFileSync(join(userDir, PROFILE_PATCH_FILENAME), [
       '- id: noop',
-      '  name: ./noop.mjs',
       '  config:',
       '    value: user-value',
-      '- insert:',
-      '    - id: user-extra',
-      '      name: ./noop.mjs',
       '',
     ].join('\n'))
     const ctx = await boot(NAME, writeTree(dir), loadOptionalPatches(NAME, join(userDir, PROFILE_PATCH_FILENAME)))
@@ -305,7 +304,7 @@ describe('boot with user patches', () => {
       const noop = [...ctx.loader.entries()].find(entry => entry.options.id === 'noop')
       // The mounted plugin received the interpolated environment value.
       expect(noop?.fiber?.config).toEqual({ value: 'user-value' })
-      expect([...ctx.loader.entries()].some(entry => entry.options.id === 'user-extra')).toBe(true)
+
     } finally {
       await ctx.fiber.dispose()
     }

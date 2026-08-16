@@ -93,6 +93,8 @@
     "removed telemetry and feedback activation",
     "removed x-deepseek-harness-user-id and anonymous-id resolution from model requests",
     "blocked JavaScript tags in user/profile/--patch YAML",
+    "restricted writable patch layers to id-targeted overrides",
+    "synchronized public CLI documentation with hardened behavior",
     "disabled external profile plugin management",
     "disabled Cordis host/client dynamic evaluators",
     "removed the Cordis dynamic Remote namespace and forwarded events",
