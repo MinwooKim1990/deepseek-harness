@@ -335,6 +335,38 @@ import type {} from '@deepseek-ai/dsh-cordis-host-runner/types'
     "",
 )
 
+exact(
+    "packages/extensions/cordis-client-runner/src/client/index.ts",
+    """  // Forwarded Host events: `$on` hands the listener the Host's own argument list,
+  // so these read the request itself rather than a transport envelope.
+  ctx.remote.$on('cordis/request-run', (request) => {
+    orchestrator.open(request)
+  })
+  ctx.remote.$on('cordis/request-run-resolved', (resolved) => { orchestrator.close(resolved.requestId) })
+  ctx.remote.$on('cordis/dynamic-retract', (retracted) => {
+    runner.retract(retracted.pluginId, retracted.pluginRunId)
+  })
+  ctx.remote.$on('cordis/inspect-query', (request) => {
+    void inspect.query(request).catch((error: unknown) => {
+      console.error(`[cordis-client-runner] inspect query ${request.provider}.${request.method} failed:`, error)
+    })
+  })
+  ctx.remote.$on('cordis/inspect-query-resolved', (resolved) => { inspect.close(resolved.requestId) })
+""",
+    "",
+)
+exact(
+    "packages/extensions/ui-cordis/src/client/index.ts",
+    """  ctx.remote.$on('cordis/dynamic-package', () => { inventory.refresh() })
+  ctx.remote.$on('cordis/dynamic-retract', () => { inventory.refresh() })
+  ctx.remote.$on('cordis/request-run', (request) => {
+    if (!inventory.getSnapshot().rows.some(row => row.pluginId === request.pluginId)) inventory.refresh()
+  })
+  ctx.remote.$on('cordis/request-run-resolved', () => { inventory.refresh() })
+""",
+    "",
+)
+
 # Disable arbitrary package installation/update in hardened profiles.
 write(
     "apps/cli/src/plugin.ts",

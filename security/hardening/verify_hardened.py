@@ -65,6 +65,12 @@ absent("packages/api/remotes/src/remote-events.ts", [
 ])
 absent("packages/api/remotes/src/index.ts", ["dsh-cordis-host-runner/types"])
 absent("packages/host/apiproxy/src/api-proxy.ts", ["dsh-cordis-host-runner/types"])
+absent("packages/extensions/cordis-client-runner/src/client/index.ts", [
+    "ctx.remote.$on('cordis/request-run'", "ctx.remote.$on('cordis/inspect-query'",
+])
+absent("packages/extensions/ui-cordis/src/client/index.ts", [
+    "ctx.remote.$on('cordis/dynamic-package'", "ctx.remote.$on('cordis/request-run'",
+])
 present("apps/cli/src/plugin.ts", ["external profile plugin management is disabled"])
 
 for rel in [
